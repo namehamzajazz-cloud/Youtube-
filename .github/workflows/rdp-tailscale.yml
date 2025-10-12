@@ -1,0 +1,81 @@
+name: 🖥️ RDP + 🌐 Tailscale (HamzaEditz)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ts_tailnet:
+        description: "Your Tailscale tailnet name (example: example@gmail.com)"
+        required: true
+      ts_authkey:
+        description: "Your Tailscale auth key (from https://login.tailscale.com/admin/settings/keys)"
+        required: true
+
+jobs:
+  setup-rdp-tailscale:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: 🎨 Setup RDP user
+        shell: powershell
+        run: |
+          $esc = [char]27
+          function ColorEcho($colorCode, $text) {
+            Write-Host "$esc[$colorCode""m$text$esc[0m"
+          }
+
+          ColorEcho "96" "🔧 Setting up RDP user..."
+          $user = "HamzaEditz"
+          $password = "Hamza@12345"
+          $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+
+          if (Get-LocalUser -Name $user -ErrorAction SilentlyContinue) {
+              ColorEcho "93" "User already exists, updating password..."
+              Set-LocalUser -Name $user -Password $securePassword
+          } else {
+              ColorEcho "94" "Creating new user '$user'..."
+              New-LocalUser -Name $user -Password $securePassword -FullName "Hamza Editz" -Description "Temporary RDP user"
+          }
+
+          Add-LocalGroupMember -Group "Administrators" -Member $user
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          ColorEcho "92" "✅ RDP user 'HamzaEditz' configured successfully!"
+          ColorEcho "97" "Login with →  Username: HamzaEditz  |  Password: Hamza@12345"
+
+      - name: 🌐 Install & Configure Tailscale
+        shell: powershell
+        run: |
+          $esc = [char]27
+          function ColorEcho($colorCode, $text) {
+            Write-Host "$esc[$colorCode""m$text$esc[0m"
+          }
+
+          ColorEcho "96" "📦 Downloading and installing Tailscale..."
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe" -OutFile "tailscale-setup.exe"
+          Start-Process -FilePath "tailscale-setup.exe" -ArgumentList "/quiet" -Wait
+          ColorEcho "92" "✅ Tailscale installed successfully."
+
+          ColorEcho "94" "🔑 Logging into Tailscale..."
+          ts logout | Out-Null
+          ts up --authkey "${{ github.event.inputs.ts_authkey }}" --hostname "HamzaServer" --accept-dns=true --accept-routes=true --login-server "https://login.tailscale.com"
+
+          $ip = ts ip -4
+          ColorEcho "92" "✅ Connected to Tailscale network!"
+          ColorEcho "97" "🌐 Your Tailscale IP: $ip"
+
+      - name: 💡 Keep Alive
+        shell: powershell
+        run: |
+          $esc = [char]27
+          function ColorEcho($colorCode, $text) {
+            Write-Host "$esc[$colorCode""m$text$esc[0m"
+          }
+
+          ColorEcho "95" "💤 Keeping session alive..."
+          while ($true) {
+            ColorEcho "93" "Heartbeat → $(Get-Date)"
+            Start-Sleep -Seconds 60
+          }
